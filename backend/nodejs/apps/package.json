@@ -44,6 +44,9 @@
     "typescript": "^5.7.2"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.975.0",
+    "@aws-sdk/lib-storage": "^3.975.0",
+    "@aws-sdk/s3-request-presigner": "^3.975.0",
     "@azure/msal-node": "^3.8.4",
     "@azure/storage-blob": "^12.25.0",
     "@node-saml/passport-saml": "^5.1.0",
@@ -58,7 +61,6 @@
     "@types/swagger-ui-express": "^4.1.8",
     "arangojs": "^10.1.1",
     "async-mutex": "^0.5.0",
-    "aws-sdk": "^2.1534.0",
     "axios": "^1.12.0",
     "axios-retry": "^4.5.0",
     "bcryptjs": "^3.0.2",

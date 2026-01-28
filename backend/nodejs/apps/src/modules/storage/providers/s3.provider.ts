@@ -1,4 +1,15 @@
-import { S3 } from 'aws-sdk';
+import {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+  CreateMultipartUploadCommand,
+  UploadPartCommand,
+  CompleteMultipartUploadCommand,
+  HeadObjectCommand,
+  S3ServiceException,
+} from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { Upload } from '@aws-sdk/lib-storage';
 import { StorageServiceInterface } from '../services/storage.service';
 import {
   FilePayload,
@@ -17,13 +28,14 @@ import {
 } from '../../../libs/errors/storage.errors';
 import { Logger } from '../../../libs/services/logger.service';
 import { encodeRFC5987 } from '../utils/utils';
+import { Readable } from 'stream';
 
 /**
  * Implementation of StorageServiceInterface for Amazon S3
- * Handles file operations with Amazon S3 storage service
+ * Handles file operations with Amazon S3 storage service using AWS SDK v3
  */
 class AmazonS3Adapter implements StorageServiceInterface {
-  private readonly s3: S3;
+  private readonly s3Client: S3Client;
   private readonly bucketName: string;
   private readonly region: string;
   private readonly logger = Logger.getInstance({ service: 'AmazonS3Adapter' });
@@ -50,13 +62,16 @@ class AmazonS3Adapter implements StorageServiceInterface {
       }
 
       // Validate and sanitize region input (defense-in-depth for AWS SDK v2 region validation advisory)
+      // Keeping this validation for v3 as well for good measure
       const sanitizedRegion = this.validateAndSanitizeRegion(region);
 
-      // Initialize AWS S3 client
-      this.s3 = new S3({
-        accessKeyId,
-        secretAccessKey,
+      // Initialize AWS S3 client (v3)
+      this.s3Client = new S3Client({
         region: sanitizedRegion,
+        credentials: {
+          accessKeyId,
+          secretAccessKey,
+        },
       });
 
       this.bucketName = bucket;
@@ -90,12 +105,6 @@ class AmazonS3Adapter implements StorageServiceInterface {
     try {
       this.validateFilePayload(documentInPayload);
 
-      const uploadParams = {
-        Bucket: this.bucketName,
-        Key: documentInPayload.documentPath,
-        Body: documentInPayload.buffer,
-        ContentType: documentInPayload.mimeType,
-      };
       if (process.env.NODE_ENV == 'development') {
         this.logger.info('Starting S3 upload', {
           path: documentInPayload.documentPath,
@@ -103,9 +112,19 @@ class AmazonS3Adapter implements StorageServiceInterface {
         });
       }
 
-      const result = await this.s3.upload(uploadParams).promise();
+      const upload = new Upload({
+        client: this.s3Client,
+        params: {
+          Bucket: this.bucketName,
+          Key: documentInPayload.documentPath,
+          Body: documentInPayload.buffer,
+          ContentType: documentInPayload.mimeType,
+        },
+      });
 
-      if (!result?.Key) {
+      const result = await upload.done();
+
+      if (!result.Key) {
         throw new StorageUploadError('Upload response missing file key');
       }
 
@@ -150,16 +169,31 @@ class AmazonS3Adapter implements StorageServiceInterface {
 
       const key = this.extractKeyFromUrl(document.s3.url);
 
-      const uploadParams = {
-        Bucket: this.bucketName,
-        Key: key,
-        Body: bufferDataInPayLoad,
-        ContentType: document.mimeType,
-      };
+      // Check if object exists (optional, but good for "update" semantics)
+      try {
+        await this.s3Client.send(
+          new HeadObjectCommand({ Bucket: this.bucketName, Key: key }),
+        );
+      } catch (error) {
+        if (error instanceof S3ServiceException && error.name === 'NotFound') {
+          throw new StorageNotFoundError('Document does not exist in S3');
+        }
+        throw error; // Re-throw other errors
+      }
 
-      const result = await this.s3.upload(uploadParams).promise();
+      const upload = new Upload({
+        client: this.s3Client,
+        params: {
+          Bucket: this.bucketName,
+          Key: key,
+          Body: bufferDataInPayLoad,
+          ContentType: document.mimeType,
+        },
+      });
 
-      if (!result?.Key) {
+      const result = await upload.done();
+
+      if (!result.Key) {
         throw new StorageUploadError('Update response missing file key');
       }
 
@@ -204,22 +238,39 @@ class AmazonS3Adapter implements StorageServiceInterface {
 
       const key = this.extractKeyFromUrl(s3Url);
 
-      const response = await this.s3
-        .getObject({
-          Bucket: this.bucketName,
-          Key: key,
-        })
-        .promise();
+      const command = new GetObjectCommand({
+        Bucket: this.bucketName,
+        Key: key,
+      });
+
+      const response = await this.s3Client.send(command);
 
       if (!response.Body) {
         throw new StorageDownloadError('Retrieved object has no content');
       }
+
+      // Convert ReadableStream to Buffer
+      const chunks: Uint8Array[] = [];
+      if (response.Body instanceof Readable) {
+        for await (const chunk of response.Body) {
+          chunks.push(chunk);
+        }
+      } else {
+        // Handle other body types if necessary (e.g., Blob, ReadableStream from web standard)
+        // For Node.js environment, response.Body is typically a Readable stream.
+        const stream = response.Body as unknown as Readable;
+        for await (const chunk of stream) {
+          chunks.push(chunk);
+        }
+      }
+      const buffer = Buffer.concat(chunks);
+
       if (process.env.NODE_ENV == 'development') {
         this.logger.info('S3 object fetched successfully', { key });
       }
       return {
         statusCode: 200,
-        data: response.Body as Buffer,
+        data: buffer,
       };
     } catch (error) {
       if (error instanceof StorageError) {
@@ -243,13 +294,13 @@ class AmazonS3Adapter implements StorageServiceInterface {
     mimeType: string,
   ): Promise<StorageServiceResponse<{ uploadId: string }>> {
     try {
-      const params = {
+      const command = new CreateMultipartUploadCommand({
         Bucket: this.bucketName,
         Key: documentPath,
         ContentType: mimeType,
-      };
+      });
 
-      const response = await this.s3.createMultipartUpload(params).promise();
+      const response = await this.s3Client.send(command);
 
       if (!response.UploadId) {
         throw new MultipartUploadError('Failed to get upload ID');
@@ -283,14 +334,16 @@ class AmazonS3Adapter implements StorageServiceInterface {
     uploadId: string,
   ): Promise<StorageServiceResponse<{ url: string; partNumber: number }>> {
     try {
-      const params = {
+      const command = new UploadPartCommand({
         Bucket: this.bucketName,
         Key: documentPath,
         PartNumber: partNumber,
         UploadId: uploadId,
-      };
+      });
 
-      const url = await this.s3.getSignedUrlPromise('uploadPart', params);
+      const url = await getSignedUrl(this.s3Client, command, {
+        expiresIn: 3600,
+      });
 
       return {
         statusCode: 200,
@@ -320,22 +373,24 @@ class AmazonS3Adapter implements StorageServiceInterface {
     parts: Array<{ ETag: string; PartNumber: number }>,
   ): Promise<StorageServiceResponse<{ url: string }>> {
     try {
-      const params = {
+      const command = new CompleteMultipartUploadCommand({
         Bucket: this.bucketName,
         Key: documentPath,
         UploadId: uploadId,
         MultipartUpload: { Parts: parts },
-      };
+      });
 
-      const response = await this.s3.completeMultipartUpload(params).promise();
+      const response = await this.s3Client.send(command);
 
-      if (!response.Key) {
+      // In v3 response might use 'Key' or 'Location'
+      if (!response.Key && !response.Location) {
         throw new MultipartUploadError('Complete upload response missing key');
       }
+      const key = response.Key || documentPath; // Fallback to provided path if key missing
 
       return {
         statusCode: 200,
-        data: { url: this.getS3Url(response.Key) },
+        data: { url: this.getS3Url(key) },
       };
     } catch (error) {
       if (error instanceof StorageError) {
@@ -357,13 +412,14 @@ class AmazonS3Adapter implements StorageServiceInterface {
     documentPath: string,
   ): Promise<StorageServiceResponse<{ url: string }>> {
     try {
-      const params = {
+      const command = new PutObjectCommand({
         Bucket: this.bucketName,
         Key: documentPath,
-        Expires: 3600, // 1 hour
-      };
+      });
 
-      const url = await this.s3.getSignedUrlPromise('putObject', params);
+      const url = await getSignedUrl(this.s3Client, command, {
+        expiresIn: 3600,
+      });
 
       return {
         statusCode: 200,
@@ -416,7 +472,7 @@ class AmazonS3Adapter implements StorageServiceInterface {
         throw new PresignedUrlError('Failed to extract S3 key from URL');
       }
 
-      const params: S3.GetObjectRequest = {
+      const params: any = {
         Bucket: this.bucketName,
         Key: key,
       };
@@ -427,9 +483,9 @@ class AmazonS3Adapter implements StorageServiceInterface {
         params.ResponseContentDisposition = `attachment; filename*=UTF-8''${filenameStar}`;
       }
 
-      const signedUrl = await this.s3.getSignedUrlPromise('getObject', {
-        ...params,
-        Expires: expirationTimeInSeconds, // `Expires` is added here
+      const command = new GetObjectCommand(params);
+      const signedUrl = await getSignedUrl(this.s3Client, command, {
+        expiresIn: expirationTimeInSeconds,
       });
 
       return {
