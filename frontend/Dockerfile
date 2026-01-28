@@ -1,5 +1,5 @@
 # Stage 1: Build the application
-FROM node:20.10.0-alpine AS build
+FROM node:20.19.5-alpine AS build
 
 ENV NODE_OPTIONS=--max-old-space-size=4096
 
@@ -22,7 +22,7 @@ COPY . .
 RUN npm run build
 
 # Stage 2: Serve the built app
-FROM node:20.10.0-alpine
+FROM node:20.19.5-alpine
 
 # Install the 'serve' package to serve static files
 RUN npm install -g serve
