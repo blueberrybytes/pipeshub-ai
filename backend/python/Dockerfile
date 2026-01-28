@@ -24,18 +24,22 @@ RUN pyinstaller --hidden-import=requests --hidden-import=urllib3 \
     --hidden-import=app.indexing_main --hidden-import=dateutil --hidden-import=dateutil.tz \
     --hidden-import=dateutil.zoneinfo --collect-all=requests --hidden-import=pydantic \
     --hidden-import=pydantic-core --hidden-import=pydantic.deprecated.decorator \
+    --hidden-import=celery.fixups --collect-all=celery \
     --collect-submodules=dependency_injector --collect-all=dateutil app/indexing_main.py
 
 RUN pyinstaller --hidden-import=requests --hidden-import=urllib3 \
     --hidden-import=app.connectors_main --hidden-import=dateutil --hidden-import=dateutil.tz \
     --hidden-import=dateutil.zoneinfo --collect-all=requests --hidden-import=pydantic \
     --hidden-import=pydantic-core --hidden-import=pydantic.deprecated.decorator \
+    --hidden-import=celery.fixups --collect-all=celery \
     --collect-submodules=dependency_injector --collect-all=dateutil app/connectors_main.py
 
 RUN pyinstaller --hidden-import=requests --hidden-import=urllib3 \
     --hidden-import=app.query_main --hidden-import=dateutil --hidden-import=dateutil.tz \
     --hidden-import=dateutil.zoneinfo --collect-all=requests --hidden-import=pydantic \
     --hidden-import=pydantic-core --hidden-import=pydantic.deprecated.decorator \
+    --hidden-import=celery.fixups --collect-all=celery \
+    --add-data "app/assets:app/assets" \
     --collect-submodules=dependency_injector --collect-all=dateutil app/query_main.py
 
 ##### FINAL STAGE #####
