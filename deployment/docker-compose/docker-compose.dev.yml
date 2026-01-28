@@ -133,7 +133,7 @@ services:
       - redis_data:/data
 
   arango:
-    image: arangodb:3.11.14
+    image: arangodb:3.12.7.1
     restart: always
     ports:
       - "8529:8529"
@@ -142,7 +142,11 @@ services:
     volumes:
       - arango_data:/var/lib/arangodb3
     healthcheck:
-      test: ["CMD-SHELL", "arangosh --server.endpoint tcp://localhost:8529 --server.password '${ARANGO_PASSWORD:-your_password}' --javascript.execute-string 'db._version()' || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          "arangosh --server.endpoint tcp://localhost:8529 --server.password '${ARANGO_PASSWORD:-your_password}' --javascript.execute-string 'db._version()' || exit 1",
+        ]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -208,7 +212,7 @@ services:
       - QDRANT__SERVICE__MAX_REQUEST_SIZE_MB=64
       - QDRANT__SERVICE__GRPC_PORT=6334
       - QDRANT__SERVICE__HTTP_PORT=6333
-      - QDRANT__STORAGE__PERFORMANCE__MAX_SEARCH_THREADS=0  # Use all available CPUs
+      - QDRANT__STORAGE__PERFORMANCE__MAX_SEARCH_THREADS=0 # Use all available CPUs
       - QDRANT__STORAGE__OPTIMIZERS__DEFAULT_SEGMENT_NUMBER=8
       - QDRANT__STORAGE__OPTIMIZERS__MEMMAP_THRESHOLD=50000
       - QDRANT__STORAGE__WAL__WAL_CAPACITY_MB=256
@@ -218,10 +222,10 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '4'
+          cpus: "4"
           memory: 4G
         reservations:
-          cpus: '2'
+          cpus: "2"
           memory: 2G
     ulimits:
       nofile:
