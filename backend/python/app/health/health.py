@@ -40,12 +40,7 @@ class Health:
         logger = container.logger()
         logger.info("🔍 Starting Connector service health check...")
 
-        # Get connector endpoint from config service
-        config_service: ConfigurationService = container.config_service()
-        endpoints = await config_service.get_config(config_node_constants.ENDPOINTS.value)
-        connector_endpoint = (
-            (endpoints or {}).get("connectors", {}).get("endpoint", DefaultEndpoints.CONNECTOR_ENDPOINT.value)
-        )
+        connector_endpoint = os.getenv("CONNECTOR_INTERNAL_URL", "http://localhost:8088")
         connector_url = f"{connector_endpoint}/health"
 
         max_retries = HealthCheckConfig.CONNECTOR_HEALTH_CHECK_MAX_RETRIES.value
