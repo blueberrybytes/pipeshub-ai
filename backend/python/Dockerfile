@@ -16,6 +16,9 @@ RUN pip3 install --no-cache-dir -e . && \
 # Copy application files
 COPY app/ ./app/
 
+# Download spaCy model
+RUN python -m spacy download en_core_web_sm
+
 # Set PYTHONPATH
 ENV PYTHONPATH="/build:$PYTHONPATH"
 
@@ -25,6 +28,7 @@ RUN pyinstaller --hidden-import=requests --hidden-import=urllib3 \
     --hidden-import=dateutil.zoneinfo --collect-all=requests --hidden-import=pydantic \
     --hidden-import=pydantic-core --hidden-import=pydantic.deprecated.decorator \
     --hidden-import=celery.fixups --collect-all=celery \
+    --collect-all=spacy --collect-all=en_core_web_sm \
     --collect-submodules=dependency_injector --collect-all=dateutil app/indexing_main.py
 
 RUN pyinstaller --hidden-import=requests --hidden-import=urllib3 \

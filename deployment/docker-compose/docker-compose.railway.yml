@@ -28,6 +28,8 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
+      - NODE_ENV=development
+      - LOG_LEVEL=debug
 
       # Internal Python service URLs (using service names)
       - QUERY_BACKEND=http://backend-python:8000
@@ -95,6 +97,9 @@ services:
       - "8091:8091" # indexing_main
     restart: always
     environment:
+      - NODE_ENV=development
+      - LOG_LEVEL=debug
+
       # Database connections
       - ARANGO_URL=http://arango:8529
       - ARANGO_DB_NAME=es
