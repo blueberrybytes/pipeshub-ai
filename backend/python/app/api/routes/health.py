@@ -21,10 +21,19 @@ router = APIRouter()
 
 SPARSE_IDF = False
 
+import sys
+
 def _load_test_image() -> str:
     """Loads the base64 encoded test image from a file."""
-    # Path is relative to this file. Adjust if you place the asset elsewhere.
-    file_path = os.path.join(os.path.dirname(__file__), '..', '..', 'assets', 'test_image.b64')
+    # When running as PyInstaller bundle, use _MEIPASS to find bundled assets
+    if getattr(sys, 'frozen', False):
+        # Running as PyInstaller bundle
+        base_path = sys._MEIPASS
+    else:
+        # Running as normal Python script
+        base_path = os.path.dirname(__file__)
+    
+    file_path = os.path.join(base_path, 'app', 'assets', 'test_image.b64')
     with open(file_path, 'r') as f:
         return f.read().strip()
 

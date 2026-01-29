@@ -176,6 +176,8 @@ backend/python/default_config*.json
 test.txt
 image_*.png 
 *.log
+node_modules
+package-lock.json
 
 
 .cursorignore
