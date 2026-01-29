@@ -3,6 +3,7 @@
   "description": "AI-powered pipeline management platform",
   "scripts": {
     "up": "cd deployment/docker-compose && docker compose -f docker-compose.dev.yml -p pipeshub-ai up --build -d",
+    "railway": "cd deployment/docker-compose && docker compose -f docker-compose.railway.yml -p pipeshub-ai up --build -d",
     "down": "cd deployment/docker-compose && docker compose -f docker-compose.dev.yml -p pipeshub-ai down"
   }
 }

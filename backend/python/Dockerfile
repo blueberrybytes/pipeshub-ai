@@ -32,6 +32,7 @@ RUN pyinstaller --hidden-import=requests --hidden-import=urllib3 \
     --hidden-import=dateutil.zoneinfo --collect-all=requests --hidden-import=pydantic \
     --hidden-import=pydantic-core --hidden-import=pydantic.deprecated.decorator \
     --hidden-import=celery.fixups --collect-all=celery \
+    --hidden-import=app.connectors.sources.google.common.sync_tasks \
     --collect-submodules=dependency_injector --collect-all=dateutil app/connectors_main.py
 
 RUN pyinstaller --hidden-import=requests --hidden-import=urllib3 \
